@@ -1,0 +1,231 @@
+---
+title: "HW5"
+author: "Xinyi Wang"
+date: "March 1, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#7.3
+```{r}
+x.1 <- seq(-2,1,0.1)  # X<1
+x.2 <- seq(1,2,0.1)   # X>=1
+y.1 <- 1 + x.1
+y.2 <- 1 + x.2 - 2*(x.2-1)^2
+plot(c(x.1,x.2),c(y.1,y.2))
+```
+
+#7.9 a
+```{r}
+require(gam)
+require(MASS)
+data(Boston)
+set.seed(1)
+fit.poly <- lm(nox~poly(dis,3), data=Boston)
+dislims <- range(Boston$dis)
+dis.grid <- seq(dislims[1], dislims[2], 0.1)
+preds <- predict(fit.poly, newdata=list(dis=dis.grid), se=TRUE)
+se.bands <- preds$fit + cbind(2*preds$se.fit, -2*preds$se.fit)
+par(mfrow=c(1,1), mar=c(4.5,4.5,1,1), oma=c(0,0,4,0))
+plot(Boston$dis, Boston$nox, xlim=dislims, cex=0.5)
+lines(dis.grid, preds$fit, lwd=2, col="blue")
+summary(fit.poly)
+```
+
+#7.9 b
+```{r, warning=FALSE, message=FALSE}
+rss.error <- rep(0,10)
+for (i in 1:10) {
+  lm.fit <- lm(nox~poly(dis,i), data=Boston)
+  rss.error[i] <- sum(lm.fit$residuals^2)
+}
+rss.error
+plot(rss.error, type="b")  
+```
+#7.9 c
+```{r}
+require(boot)
+set.seed(1)
+cv.error <- rep(0,10)
+for (i in 1:10) {
+  glm.fit <- glm(nox~poly(dis,i), data=Boston)
+  cv.error[i] <- cv.glm(Boston, glm.fit, K=10)$delta[1]  #use 10 fold cv
+}
+cv.error
+plot(cv.error, type="b") 
+```
+#7.9 d
+```{r}
+require(splines)
+fit.sp <- lm(nox~bs(dis, df=4), data=Boston)
+pred <- predict(fit.sp, newdata=list(dis=dis.grid), se=T)
+plot(Boston$dis, Boston$nox, col="gray")
+lines(dis.grid, pred$fit, lwd=2)
+lines(dis.grid, pred$fit+2*pred$se, lty="dashed")
+lines(dis.grid, pred$fit-2*pred$se, lty="dashed")
+# set df to select knots at uniform quantiles of `dis`
+attr(bs(Boston$dis,df=4),"knots")  # only 1 knot at 50th percentile
+```
+
+#7.9 e
+```{r}
+require(splines)
+set.seed(1)
+rss.error <- rep(0,7)
+for (i in 4:10) {
+  fit.sp <- lm(nox~bs(dis, df=i), data=Boston)
+  rss.error[i-3] <- sum(fit.sp$residuals^2)
+}
+rss.error
+plot(4:10, rss.error, type="b")  # RSS decreases on train set w more flexible fit
+```
+
+#7.9 f
+
+```{r}
+require(splines)
+require(boot)
+set.seed(1)
+cv.error <- rep(0,7)
+for (i in 4:10) {
+  glm.fit <- glm(nox~bs(dis, df=i), data=Boston)
+  cv.error[i-3] <- cv.glm(Boston, glm.fit, K=10)$delta[1]
+}
+cv.error
+plot(4:10, cv.error, type="b")  # should use at least df=5
+```
+
+##7.10 a
+
+```{r, message=FALSE, warning=FALSE}
+require(ISLR)
+require(leaps)
+data(College)
+train = sample(nrow(College), nrow(College) / 2)
+test = -train
+train.X = College[train, ]
+test.X = College[test, ]
+test.Y = College$Outstate[test]
+
+regfit.fwd = regsubsets(Outstate~., data = train.X, nvmax = ncol(College) - 1, method = "forward")
+regfit.fwd_summary = summary(regfit.fwd)
+par(mfrow = c(2,2))
+plot(regfit.fwd_summary$rss, xlab = "Number of Variables", ylab = "RSS", type = "l")
+points(which.min(regfit.fwd_summary$rss), min(regfit.fwd_summary$rss), col = "red", cex = 2, pch = 20)
+plot(regfit.fwd_summary$adjr2, xlab = "Number of variables", ylab = "Adjusted RSq", type = "l")
+points(which.max(regfit.fwd_summary$adjr2), max(regfit.fwd_summary$adjr2), col = "red", cex = 2, pch = 20)
+plot(regfit.fwd_summary$cp, xlab = "Number of variables", ylab = "Mallows' Cp", type = "l")
+points(which.min(regfit.fwd_summary$cp), min(regfit.fwd_summary$cp), col = "red", cex = 2, pch = 20)
+plot(regfit.fwd_summary$bic, xlab = "Number of variables", ylab = "BIC", type = "l")
+points(which.min(regfit.fwd_summary$bic), min(regfit.fwd_summary$bic), col = "red", cex = 2, pch = 20)
+par(mfrow = c(1,1))
+```
+
+##7.10 b
+
+```{r, message=FALSE, warning=FALSE}
+library(gam)
+par(mfrow = c(2,5))
+gam.m = gam(Outstate ~ Private + Apps + Accept + Top25perc + Room.Board + Personal + Terminal + perc.alumni + Expend + Grad.Rate, data = College)
+plot.Gam(gam.m, se = T, col = "red")
+par(mfrow = c(1,1))
+```
+
+##7.10 c
+
+```{r}
+preds_all_linear = predict(gam.m, newdata = test.X)
+mean((preds_all_linear - test.Y)^2)
+```
+
+##7.10 d
+
+```{r}
+par(mfrow = c(2,5))
+gam.full = gam(Outstate ~ Private + s(Apps, 4) + s(Accept, 4) + s(Top25perc, 4) + s(Room.Board, 4) + s(Personal, 4) + s(Terminal, 4) + s(perc.alumni, 4) + s(Expend, 4) + s(Grad.Rate, 4), data = College)
+summary(gam.full)
+```
+
+
+
+##7.11 a
+
+```{r}
+set.seed(1)
+X1 <- rnorm(100)
+X2 <- rnorm(100)
+beta_0 <- -3.8
+beta_1 <- 0.3
+beta_2 <- 4.1
+eps <- rnorm(100, sd = 1)
+Y <- beta_0 + beta_1*X1 + beta_2*X2 + eps
+par(mfrow=c(1,1))
+plot(Y)
+```
+##7.11 b
+
+```{r}
+# initialize beta hat 1
+bhat_1 <- 1
+```
+
+##7.11 c
+
+```{r}
+a <- Y - bhat_1*X1
+(bhat_2 <- lm(a~X2)$coef[2])
+```
+
+##7.11 d
+
+```{r}
+a <- Y - bhat_2*X2
+(bhat_1 <- lm(a~X1)$coef[2])
+```
+
+##7.11 e
+
+```{r}
+bhat_0 <- bhat_1 <- bhat_2 <- rep(0, 1000)
+for (i in 1:1000) {
+  a <- Y - bhat_1[i] * X1
+  bhat_2[i] <- lm(a ~ X2)$coef[2]
+  a <- Y - bhat_2[i] * X2
+  bhat_0[i] <- lm(a ~ X1)$coef[1]
+  # bhat_1 will end up with 1001 terms
+  bhat_1[i+1] <- lm(a ~ X1)$coef[2]
+}
+# make plots
+require(ggplot2)
+require(reshape2)
+mydf <- data.frame(Iteration=1:1000, bhat_0, bhat_1=bhat_1[-1], bhat_2)
+mmydf <- melt(mydf, id.vars="Iteration")
+ggplot(mmydf, aes(x=Iteration, y=value, group=variable, col=variable)) + 
+  geom_line(size=1) + ggtitle("Plot of beta estimates by Iteration")
+```
+
+##7.11 f
+
+```{r}
+fit.lm <- lm(Y ~ X1 + X2)
+coef(fit.lm)
+plot(bhat_0, type="l", col="red", lwd=2, xlab="Iterations", 
+     ylab="beta estimates", ylim=c(-5,10))
+lines(bhat_1[-1], col="green", lwd=2)
+lines(bhat_2, col="blue", lwd=2)
+abline(h=coef(fit.lm)[1], lty="dashed", lwd=3, col="brown")
+abline(h=coef(fit.lm)[2], lty="dashed", lwd=3, col="darkgreen")
+abline(h=coef(fit.lm)[3], lty="dashed", lwd=3, col="darkblue")
+legend(x=600,y=9.7, c("bhat_0", "bhat_1", "bhat_2", "multiple regression"),
+       lty = c(1,1,1,2), 
+       col = c("red","green","blue","gray"))
+```
+
+##7.11 g
+
+```{r}
+head(mydf)
+```
